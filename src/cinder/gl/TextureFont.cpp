@@ -41,6 +41,8 @@
 	#endif
 #elif defined( CINDER_MSW )
 	#include <Windows.h>
+	#undef min
+	#undef max
 #elif defined( CINDER_ANDROID ) || defined( CINDER_LINUX )
 	#include "cinder/linux/FreeTypeUtil.h" 
 #endif
@@ -112,7 +114,7 @@ TextureFont::TextureFont( const Font &font, const string &supportedChars, const 
 				ip::unpremultiply( &surface );
 
 			gl::Texture::Format textureFormat = gl::Texture::Format();
-			textureFormat.mipmap( mFormat.hasMipmapping() );
+			textureFormat.enableMipmapping( mFormat.hasMipmapping() );
 			GLint dataFormat;
 #if defined( CINDER_GL_ES )
 			dataFormat = GL_LUMINANCE_ALPHA;
@@ -152,7 +154,7 @@ TextureFont::TextureFont( const Font &font, const string &supportedChars, const 
 	::CGContextRelease( cgContext );
 }
 
-#elif defined( CINDER_MSW )
+#elif defined( CINDER_MSW_DESKTOP )
 
 set<Font::Glyph> getNecessaryGlyphs( const Font &font, const string &supportedChars )
 {
@@ -220,7 +222,7 @@ TextureFont::TextureFont( const Font &font, const string &utf8Chars, const Forma
 			glyphExtents.x = std::max<int>( glyphExtents.x, bb.getWidth() );
 			glyphExtents.y = std::max<int>( glyphExtents.y, bb.getHeight() );
 		}
-		catch( FontGlyphFailureExc &e ) {
+		catch( FontGlyphFailureExc & ) {
 		}
 	}
 
@@ -291,7 +293,7 @@ TextureFont::TextureFont( const Font &font, const string &utf8Chars, const Forma
 				ip::unpremultiply( &tempSurface );
 			
 			gl::Texture::Format textureFormat = gl::Texture::Format();
-			textureFormat.mipmap( mFormat.hasMipmapping() );
+			textureFormat.enableMipmapping( mFormat.hasMipmapping() );
 
 			Surface8u::ConstIter iter( tempSurface, tempSurface.getBounds() );
 			size_t offset = 0;
@@ -412,7 +414,7 @@ TextureFont::TextureFont( const Font &font, const string &utf8Chars, const Forma
 			}
 
 			gl::Texture::Format textureFormat = gl::Texture::Format();
-			textureFormat.mipmap( mFormat.hasMipmapping() );
+			textureFormat.enableMipmapping( mFormat.hasMipmapping() );
 			GLint dataFormat;
 #if defined( CINDER_GL_ES )
 			dataFormat = GL_LUMINANCE_ALPHA;

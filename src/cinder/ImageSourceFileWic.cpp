@@ -25,7 +25,6 @@
 #include "cinder/ImageSourceFileWic.h"
 #include "cinder/Utilities.h"
 #include "cinder/msw/CinderMsw.h"
-#include "cinder/Thread.h"
 
 #if (_WIN32_WINNT >= _WIN32_WINNT_WIN8) || defined(_WIN7_PLATFORM_UPDATE)
 	#include <D2D1.h>
@@ -38,8 +37,6 @@ namespace cinder {
 
 ///////////////////////////////////////////////////////////////////////////////
 // ImageSourceFileWic
-static std::mutex sGetFactoryMutex;
-
 void ImageSourceFileWic::registerSelf()
 {
 	const int32_t SOURCE_PRIORITY = 2;
@@ -92,20 +89,11 @@ ImageSourceFileWic::ImageSourceFileWic( DataSourceRef dataSourceRef, ImageSource
 	msw::initializeCom();
 	
     // Create WIC factory
-	IWICImagingFactory* factory = nullptr; 
-	{
-		// Ensure that IWICImagingFactory gets fully created so null isn't accidentally returned
-		// if the c'tor gets called from multiple threads.
-		std::lock_guard<std::mutex> lock( sGetFactoryMutex );
-		factory = getFactory();
-	}
-	if( nullptr == factory ) {
-		throw ImageIoException( "Could not get WIC Image Factory." );
-	}
-		
+	IWICImagingFactory* factory = getFactory();
+	
     // Create a decoder
 	IWICBitmapDecoder *decoderP = NULL;
-#if defined( CINDER_WINRT)
+#if defined( CINDER_UWP )
 		std::string s = dataSourceRef->getFilePath().string();
 		std::wstring filePath =	std::wstring(s.begin(), s.end());                 
 #else
@@ -132,8 +120,8 @@ ImageSourceFileWic::ImageSourceFileWic( DataSourceRef dataSourceRef, ImageSource
 			throw ImageIoExceptionFailedLoad( "Could not create WIC Stream." );
 		mStream = msw::makeComShared( pIWICStream );
 		
-		BufferRef buffer = dataSourceRef->getBuffer();
-		hr = mStream->InitializeFromMemory( reinterpret_cast<BYTE*>( buffer->getData() ), buffer->getSize() );
+		mBuffer = dataSourceRef->getBuffer();
+		hr = mStream->InitializeFromMemory( reinterpret_cast<BYTE*>( mBuffer->getData() ), mBuffer->getSize() );
 		if( ! SUCCEEDED(hr) )
 			throw ImageIoExceptionFailedLoad( "Could not initialize WIC Stream." );
 		
@@ -217,6 +205,9 @@ bool ImageSourceFileWic::processFormat( const ::GUID &guid, ::GUID *convertGUID 
 	}
 	else if( guid == GUID_WICPixelFormat32bppGrayFloat ) {
 		setChannelOrder( ImageIo::Y ); setColorModel( ImageIo::CM_GRAY ); setDataType( ImageIo::FLOAT32 );
+	}
+	else if( guid == GUID_WICPixelFormat32bppCMYK || guid == GUID_WICPixelFormat64bppCMYK || guid == GUID_WICPixelFormat40bppCMYKAlpha || guid == GUID_WICPixelFormat80bppCMYKAlpha ) {
+		throw ImageIoExceptionIllegalColorModel( "CMYK pixel format not supported." );
 	}
 	else
 		throw ImageIoException( "Unsupported format." );

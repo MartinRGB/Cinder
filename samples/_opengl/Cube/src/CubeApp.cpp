@@ -2,6 +2,7 @@
 #include "cinder/app/RendererGl.h"
 #include "cinder/gl/gl.h"
 #include "cinder/ImageIo.h"
+#include "cinder/Log.h"
 
 using namespace ci;
 using namespace ci::app;
@@ -22,16 +23,15 @@ class RotatingCubeApp : public App {
 
 void RotatingCubeApp::setup()
 {
-	//mCam.lookAt( vec3( 3, 2, 4 ), vec3( 0 ) );
-	mCam.lookAt( vec3( 0, 0, 4 ), vec3( 0 ) );
+	mCam.lookAt( vec3( 3, 2, 4 ), vec3( 0 ) );
 
 	try {
 		mTexture = gl::Texture::create( loadImage( loadAsset( "texture.jpg" ) ), gl::Texture::Format().mipmap() );
 		//mTexture->bind();
-		console() << "Loaded texture" << std::endl;
+		CI_LOG_I( "Loaded texture" );
 	}
 	catch( const std::exception& e ) {
-		console() << "Texture Error: " << e.what() << std::endl;
+		CI_LOG_E( "Texture Error: " << e.what() );
 	}
 
 	try {
@@ -40,19 +40,18 @@ void RotatingCubeApp::setup()
 #else
 		mGlsl = gl::GlslProg::create(loadAsset("shader.vert"), loadAsset("shader.frag"));
 #endif
-		console() << "Loaded shader" << std::endl;
+		CI_LOG_I( "Loaded shader" );
 	}
 	catch( const std::exception& e ) {
-		console() << "Shader Error: " << e.what() << std::endl;
+		CI_LOG_E( "Shader Error: " << e.what() );
 	}
 
 	try {
 		mBatch = gl::Batch::create( geom::Cube(), mGlsl );
-		console() << "Created batch" << std::endl;
-		//mBatch->getVboMesh()->echoIndexRange( console(), 0, mBatch->getNumIndices() );
+		CI_LOG_I( "Created batch" );
 	}
 	catch( const std::exception& e ) {
-		console() << "Shader Error: " << e.what() << std::endl;
+		CI_LOG_E( "Shader Error: " << e.what() );
 	}
 
 	gl::enableDepthWrite();
@@ -67,13 +66,15 @@ void RotatingCubeApp::resize()
 
 void RotatingCubeApp::update()
 {
+	//console() << "RotatingCubeApp::update()" << std::endl;
+
 	// Rotate the cube by 0.2 degrees around the y-axis
 	mCubeRotation *= rotate( toRadians( 0.2f ), normalize( vec3( 0, 1, 0 ) ) );
 }
 
 void RotatingCubeApp::draw()
 {
-	gl::clear( ColorA( 0.2f, 0.2f, 0.2f, 0.2f ) );
+	gl::clear();
 
 	gl::setMatrices( mCam );
 
@@ -84,5 +85,4 @@ void RotatingCubeApp::draw()
 	mBatch->draw();
 }
 
-//CINDER_APP( RotatingCubeApp, RendererGl( RendererGl::Options().msaa( 16 ) ) )
-CINDER_APP( RotatingCubeApp, RendererGl )
+CINDER_APP( RotatingCubeApp, RendererGl( RendererGl::Options().msaa( 16 ) ) )

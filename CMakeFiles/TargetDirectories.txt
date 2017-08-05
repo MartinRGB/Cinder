@@ -1,0 +1,3 @@
+/Users/MartinRGB/Desktop/cinder_0.9.1_mac/CMakeFiles/rebuild_cache.dir
+/Users/MartinRGB/Desktop/cinder_0.9.1_mac/CMakeFiles/edit_cache.dir
+/Users/MartinRGB/Desktop/cinder_0.9.1_mac/CMakeFiles/cinder.dir

@@ -26,9 +26,7 @@ class BasicApp : public App {
 
 void prepareSettings( BasicApp::Settings* settings )
 {
-#if defined( CINDER_ANDROID )
 	settings->setMultiTouchEnabled( false );
-#endif
 }
 
 void BasicApp::mouseDrag( MouseEvent event )
@@ -39,9 +37,6 @@ void BasicApp::mouseDrag( MouseEvent event )
 
 void BasicApp::keyDown( KeyEvent event )
 {
-	std::cout << event.getCode() << " : " << event.getChar() << std::endl;
-
-/*
 	if( event.getChar() == 'f' ) {
 		// Toggle full screen when the user presses the 'f' key.
 		setFullScreen( ! isFullScreen() );
@@ -57,7 +52,6 @@ void BasicApp::keyDown( KeyEvent event )
 		else
 			quit();
 	}
-*/
 }
 
 void BasicApp::draw()

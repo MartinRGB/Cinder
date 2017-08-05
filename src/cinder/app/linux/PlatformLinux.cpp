@@ -22,10 +22,14 @@
 */
 
 #include "cinder/app/linux/PlatformLinux.h"
+#include "cinder/app/App.h"
 #include "cinder/ImageSourceFileRadiance.h"
 #include "cinder/ImageSourceFileStbImage.h"
 #include "cinder/ImageTargetFileStbImage.h"
 #include "cinder/Utilities.h"
+#include "cinder/Log.h"
+
+#include "glfw/glfw3.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -172,6 +176,13 @@ struct DialogHelper {
 					}
 				}
 				if( ! value.empty() ) {
+					// Zenity seems to add a new line character at the end of the path, so remove it if present.
+					const auto newLineCharacterPos = std::strcspn( value.c_str(), "\n" );
+
+					if( newLineCharacterPos !=  value.size() ) {
+						value[ newLineCharacterPos ] = 0;
+					}
+
 					result = value;
 				}
 			}
@@ -343,8 +354,16 @@ std::map<std::string, std::string> PlatformLinux::getEnvironmentVariables()
 
 fs::path PlatformLinux::expandPath( const fs::path &path ) 
 {
-	// @TODO: Implement
-	return fs::path();	
+	fs::path filename = path.filename();
+
+	char actualPath[PATH_MAX];
+	if( ::realpath( path.parent_path().c_str(), actualPath ) ) { 
+		fs::path expandedPath = fs::path( std::string( actualPath ) );
+		expandedPath /= filename;
+		return expandedPath;	
+	}   
+
+	return fs::path();  
 }
 
 fs::path PlatformLinux::getHomeDirectory() const 
@@ -406,7 +425,7 @@ fs::path PlatformLinux::getDefaultExecutablePath() const
     if( ( -1 != len ) && ( len < buf.size() ) ) {
       buf[len] = '\0';
     }
- 	return fs::path( std::string( &(buf[0]), len ) );
+ 	return fs::path( std::string( &(buf[0]), len ) ).parent_path();
 }
 
 void PlatformLinux::sleep( float milliseconds ) 
@@ -440,15 +459,132 @@ std::vector<std::string> PlatformLinux::stackTrace()
 	return std::vector<std::string>();	
 }
 
-const std::vector<DisplayRef>& PlatformLinux::getDisplays()
+void PlatformLinux::addDisplay( const DisplayRef &display )
 {
-	if( ! mDisplaysInitialized ) {
-		// @TODO: Implement fuller
+	mDisplays.push_back( display );
 
-		mDisplaysInitialized = true;
+	if( app::AppBase::get() )
+		app::AppBase::get()->emitDisplayConnected( display );
+}
+
+void PlatformLinux::removeDisplay( const DisplayRef &display )
+{
+	DisplayRef displayCopy = display;
+	mDisplays.erase( std::remove( mDisplays.begin(), mDisplays.end(), displayCopy ), mDisplays.end() );
+				
+	if( app::AppBase::get() )
+		app::AppBase::get()->emitDisplayDisconnected( displayCopy );
+}
+
+std::string DisplayLinux::getName() const
+{
+#if defined( CINDER_LINUX_EGL_ONLY )
+	return std::string();
+#else
+	return glfwGetMonitorName( mMonitor );
+#endif
+}
+
+GLFWmonitor* DisplayLinux::getGlfwMonitor() const
+{
+	return mMonitor;
+}
+
+DisplayRef PlatformLinux::findDisplayFromGlfwMonitor( GLFWmonitor *monitor )
+{
+#if defined( CINDER_LINUX_EGL_ONLY )
+	return nullptr;
+#else
+	for( auto &display : mDisplays ) {
+		const auto displayLinux ( dynamic_cast<const DisplayLinux*>( display.get() ) );
+		if( displayLinux->getGlfwMonitor() == monitor )
+			return display;
 	}
 
+	return DisplayRef();
+#endif
+}
+
+#if ! defined( CINDER_LINUX_EGL_ONLY )
+void DisplayLinux::displayReconfiguredCallback( GLFWmonitor* monitor, int event )
+{
+	auto platform = app::PlatformLinux::get();
+	if( event == GLFW_DISCONNECTED ) {
+		auto display = platform->findDisplayFromGlfwMonitor( monitor );
+		if( display )
+			platform->removeDisplay( display ); // this will signal
+		else
+			CI_LOG_W( "Received removed from displayReconfiguredCallback() on unknown display" );		
+	}
+	else if( event == GLFW_CONNECTED ) {
+		auto display = platform->findDisplayFromGlfwMonitor( monitor );
+		if( ! display ) {
+			auto newDisplay = std::make_shared<DisplayLinux>();
+
+			const auto *videoMode = glfwGetVideoMode( monitor  );
+			auto size = ivec2( videoMode->width, videoMode->height );
+			ivec2 pos;
+			glfwGetMonitorPos(monitor, &pos.x, &pos.y);
+
+			newDisplay->mArea = Area( pos.x, pos.y, 
+				pos.x + size.x, pos.y + size.y );
+
+			newDisplay->mBitsPerPixel = videoMode->redBits + videoMode->greenBits + videoMode->blueBits;
+
+			// TODO: figure out content scaling.
+			//const double dpi = mode->width / (widthMM / 25.4);
+			newDisplay->mContentScale = 1.0;
+			platform->addDisplay( DisplayRef( newDisplay ) ); // this will signal
+		}
+		else
+			CI_LOG_W( "Received add from displayReconfiguredCallback() for already known display" );				
+	}
+}
+
+const std::vector<DisplayRef>& app::PlatformLinux::getDisplays()
+{
+	auto glfwInitialized = ::glfwInit();
+	if( ! mDisplaysInitialized && glfwInitialized ) {
+		// this is our first call; register a callback with CoreGraphics for any 
+		// display changes. Note that this only works with a run loop
+		::glfwSetMonitorCallback( DisplayLinux::displayReconfiguredCallback );
+		int32_t numMonitors, nonPrimaryIndex = 1;
+		GLFWmonitor **monitors = ::glfwGetMonitors( &numMonitors );
+		GLFWmonitor *mainScreen = ::glfwGetPrimaryMonitor();
+		mDisplays.resize( numMonitors );
+		for( size_t i = 0; i < numMonitors; ++i ) {
+			GLFWmonitor *monitor = monitors[i];
+			auto newDisplay = std::make_shared<DisplayLinux>();
+			
+			const auto *videoMode = ::glfwGetVideoMode( monitor );
+			auto size = ivec2( videoMode->width, videoMode->height );
+			ivec2 pos;
+			::glfwGetMonitorPos(monitor, &pos.x, &pos.y);
+
+			newDisplay->mArea = Area( pos.x, pos.y, pos.x + size.x, pos.y + size.y );
+			newDisplay->mBitsPerPixel = videoMode->redBits + videoMode->greenBits + videoMode->blueBits;
+
+			// TODO: figure out content scaling.
+			//const double dpi = mode->width / (widthMM / 25.4);
+			newDisplay->mContentScale = 1.0f;
+			newDisplay->mMonitor = monitor;
+			if( mainScreen == monitor )
+				mDisplays[0] = std::move( newDisplay );
+			else
+				mDisplays[nonPrimaryIndex++] = std::move( newDisplay );
+		}
+
+		mDisplaysInitialized = true;	
+	}
+	
 	return mDisplays;
 }
+#else // EGL
+const std::vector<DisplayRef>& app::PlatformLinux::getDisplays()
+{
+	CI_LOG_W( "getDisplays() is not implemented on EGL" );
+	return mDisplays;
+}
+#endif // #if ! defined( CINDER_LINUX_EGL_ONLY )
 
 }} // namespace cinder::app

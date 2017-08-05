@@ -34,13 +34,13 @@
 	#elif defined( CINDER_COCOA_TOUCH )
 		#import "cinder/app/cocoa/RendererImplGlCocoaTouch.h"
 	#endif
-#elif defined( CINDER_MSW )
+#elif defined( CINDER_MSW_DESKTOP )
 	#if defined( CINDER_GL_ANGLE )
 		#include "cinder/app/msw/RendererImplGlAngle.h"
 	#else
 		#include "cinder/app/msw/RendererImplGlMsw.h"
 	#endif
-#elif defined( CINDER_WINRT )
+#elif defined( CINDER_UWP )
 	#include "cinder/app/msw/RendererImplGlAngle.h"
 #elif defined( CINDER_ANDROID )
 	#include "cinder/app/android/RendererGlAndroid.h"
@@ -57,7 +57,7 @@ RendererGl::RendererGl( const RendererGl::Options &options )
 RendererGl::RendererGl( const RendererGl &renderer )
 	: Renderer( renderer ), mImpl( nullptr ), mOptions( renderer.mOptions )
 {
-#if defined( CINDER_MSW )
+#if defined( CINDER_MSW_DESKTOP )
 	mWnd = renderer.mWnd;
 #elif defined( CINDER_ANDROID )
 	mImpl = 0;	
@@ -161,12 +161,18 @@ EAGLContext* RendererGl::getEaglContext() const
 
 void RendererGl::startDraw()
 {
-	[mImpl makeCurrentContext:false];
+	if( mStartDrawFn )
+		mStartDrawFn( this );
+	else
+		[mImpl makeCurrentContext:false];
 }
 
 void RendererGl::finishDraw()
 {
-	[mImpl flushBuffer];
+	if( mFinishDrawFn )
+		mFinishDrawFn( this );
+	else
+		[mImpl flushBuffer];
 }
 
 void RendererGl::setFrameSize( int width, int height )
@@ -203,7 +209,7 @@ Surface	RendererGl::copyWindowSurface( const Area &area, int32_t windowHeightPix
 	return s;
 }
 
-#elif defined( CINDER_MSW )
+#elif defined( CINDER_MSW_DESKTOP )
 RendererGl::~RendererGl()
 {
 	delete mImpl;
@@ -285,7 +291,7 @@ Surface	RendererGl::copyWindowSurface( const Area &area, int32_t windowHeightPix
 	ip::flipVertical( &s );
 	return s;
 }
-#elif defined( CINDER_WINRT )
+#elif defined( CINDER_UWP )
 RendererGl::~RendererGl()
 {
 	delete mImpl;
